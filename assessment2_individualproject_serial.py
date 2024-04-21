@@ -205,7 +205,7 @@ def lightSensor(data):
         updateParamValue("lightSensor", light)
         
         #print("Light: ", light)
-        if (checkLatestTimestamp("sensor_type", "light_sensor", "sensor_log", 10)):
+        if (checkLatestTimestamp("sensor_type", "light_sensor", "sensor_log", 60)):
             logDataToSensorDatabase("light_sensor", light)
         else:
             return
@@ -220,7 +220,7 @@ def motionSensor(data):
         updateParamValue("PIR", motion)
         
         #print("Motion: ", motion)
-        if (checkLatestTimestamp("sensor_type", "PIR", "sensor_log", 5)):
+        if (checkLatestTimestamp("sensor_type", "PIR", "sensor_log", 10)):
             logDataToSensorDatabase("PIR", motion)
         else:
             return 
@@ -289,6 +289,15 @@ def greenLED(data):
             logDataToActuatorDatabase("greenLED", greenLED)
         else:
             return
+
+def battery(data):
+    # use regex to extract battery percentage (sample output: Battery Percentage = 100%)
+    battery_match = re.search(r'Battery percentage = (\d+(?:\.\d+)?%)', data)
+
+    if battery_match:
+        batteryPercent = battery_match.group(1)
+        updateParamValue("battPercent", batteryPercent)
+
         
 if __name__ == "__main__":
     ser = serial.Serial('/dev/ttyUSB0', 9600, timeout = 1)
@@ -454,5 +463,6 @@ if __name__ == "__main__":
             redLED(line)
             yellowLED(line)
             greenLED(line)
+            battery(line)
     
     ser.flush()

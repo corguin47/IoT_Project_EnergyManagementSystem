@@ -2,6 +2,8 @@ import mysql.connector
 import serial
 from flask import Flask, request, render_template, jsonify
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import numpy as np
 
 # variables for database connection
 db_host = "localhost"
@@ -42,6 +44,7 @@ def defaultDatabaseSetup():
         cursor.execute("INSERT INTO param_table (param_name, param_value) VALUES (%s, %s);", ("motionAppliances", "On"))
         cursor.execute("INSERT INTO param_table (param_name, param_value) VALUES (%s, %s);", ("adaptiveControl", "On"))
         cursor.execute("INSERT INTO param_table (param_name, param_value) VALUES (%s, %s);", ("adaptiveControlMode", "Custom"))
+        cursor.execute("INSERT INTO param_table (param_name, param_value) VALUES (%s, %s);", ("battPercent", "100%"))
         mydb.commit()
 
     # after one round of operations, release the cursor back to the server
@@ -90,6 +93,12 @@ def query_state(name):
     except Exception as e:
         print("Error:", e)
         return 'Unknown'
+
+@app.route('/get_battery_percent')
+def get_battery_percent():
+    # Fetch battery percentage from the database
+    battery_percent = query_state("battPercent")
+    return jsonify({'percent': battery_percent})
 
 @app.route('/get_led_state/<color>')
 def fetch_led_state(color):
@@ -335,6 +344,91 @@ def index():
 @app.route('/logs')
 def logs():
     return render_template('logs.html')
+
+@app.route('/statistics')
+def statistics():
+    return render_template('statistics.html')
+
+def get_temperature_light_stats():
+    try:
+        # Open connection to the database
+        mydb = mysql.connector.connect(host=db_host, user=db_user, password=db_password, database=db_name)
+        cursor = mydb.cursor()
+
+        # Query to fetch the highest and lowest temperature
+        cursor.execute("SELECT MAX(value), MIN(value) FROM sensor_log WHERE sensor_type = 'temp_sensor'")
+        temperature_stats = cursor.fetchone()
+        highest_temperature = temperature_stats[0]
+        lowest_temperature = temperature_stats[1]
+
+        # Query to fetch the highest light reading
+        cursor.execute("SELECT MAX(value) FROM sensor_log WHERE sensor_type = 'light_sensor'")
+        highest_light = cursor.fetchone()[0]
+
+        # Close the cursor and database connection
+        cursor.close()
+        mydb.close()
+
+        return highest_temperature, lowest_temperature, highest_light
+    except Exception as e:
+        print("Error:", e)
+        return None, None, None
+
+@app.route('/get_temperature_light_stats')
+def get_temperature_light_statistics():
+    highest_temperature, lowest_temperature, highest_light = get_temperature_light_stats()
+
+    if highest_temperature is not None:
+        return jsonify({'highest_temperature': highest_temperature, 'lowest_temperature': lowest_temperature, 'highest_light': highest_light})
+    else:
+        return jsonify({'error': 'Failed to fetch temperature and light statistics'})
+
+def actuator_analysis():
+    try:
+        # Open connection to the database
+        mydb = mysql.connector.connect(host=db_host, user=db_user, password=db_password, database=db_name)
+        cursor = mydb.cursor()
+
+        # Define the query to fetch data from actuator_log table for each actuator type
+        actuator_types = ['redLED', 'yellowLED', 'greenLED', 'LCD', 'fan']
+        actuator_data = {}
+
+        for actuator_type in actuator_types:
+            cursor.execute("SELECT timestamp, status FROM actuator_log WHERE actuator_type = %s", (actuator_type,))
+            logs = cursor.fetchall()
+
+            # Initialize dictionary to store actuator data
+            actuator_data[actuator_type] = {}
+
+            # Extract timestamps and statuses from logs
+            for log in logs:
+                timestamp = log[0]
+                status = log[1]
+
+                # Convert timestamp to string
+                timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+                # Add timestamp and status to the actuator data dictionary
+                actuator_data[actuator_type][timestamp_str] = status
+
+        # Close the cursor and database connection
+        cursor.close()
+        mydb.close()
+
+        return actuator_data
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+@app.route('/get_actuator_data')
+def get_actuator_data():
+    # Fetch actuator data from the database
+    actuator_data = actuator_analysis()
+
+    if actuator_data is not None:
+        return jsonify(actuator_data)
+    else:
+        return jsonify({'error': 'Failed to fetch actuator data'})
 
 # Function to fetch the first log of a device from the previous day
 def fetch_first_log(log_type, device, start_time, end_time):
