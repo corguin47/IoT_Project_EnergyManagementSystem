@@ -1,0 +1,159 @@
+{% extends "layout.html" %}
+
+{% block title %}Statistics - Energy Management System{% endblock %}
+
+{% block content %}
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #fff1e8;
+    }
+
+    .battery-container {
+        width: 100px;
+        height: 200px;
+        border: 2px solid #000;
+        /* Fixed outline */
+        position: relative;
+        overflow: hidden;
+        /* Ensures battery level doesn't overflow */
+    }
+
+    .battery-level {
+        width: 100%;
+        /* Fills the battery container */
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        transition: height 0.3s ease-in-out;
+        /* Adjust height transition */
+    }
+
+    .actuator-graph {
+        margin-top: 20px;
+    }
+</style>
+<div class="statistics-container">
+    <h2 class="statistics-heading">Statistics</h2>
+
+    <div class="statistics-item">
+        <p>Battery Percentage: <span id="battery_percent"></span></p>
+        <div class="battery-container">
+            <div class="battery-level" id="battery_level"></div>
+        </div>
+    </div>
+
+    <div class="device-status">
+        <h3>Longest Duration Device is On</h3>
+        <div id="longest_durations"></div>
+    </div>
+
+    <div class="temperature-light-container">
+        <h3>Highest and Lowest Temperature and Light Readings</h3>
+        <div id="temp-light-stats"></div>
+    </div>
+</div>
+
+<script>
+    fetch('/get_battery_percent')
+        .then(response => response.json())
+        .then(data => {
+            const batteryPercent = parseFloat(data.percent);
+            document.getElementById('battery_percent').innerText = batteryPercent + "%";
+
+            const batteryLevel = document.getElementById('battery_level');
+            batteryLevel.style.height = batteryPercent + '%'; // Adjust height based on battery percentage
+
+            // Change color based on remaining battery percentage
+            if (batteryPercent <= 20) {
+                batteryLevel.style.backgroundColor = '#f00'; // Red color for low battery
+            } else if (batteryPercent <= 50) {
+                batteryLevel.style.backgroundColor = '#ff0'; // Yellow color for medium battery
+            } else {
+                batteryLevel.style.backgroundColor = '#0f0'; // Green color for high battery
+            }
+        })
+        .catch(error => console.error('Error fetching battery percentage:', error));
+
+    // Fetch highest and lowest temperature and highest light reading
+    fetch('/get_temperature_light_stats')
+        .then(response => response.json())
+        .then(data => {
+            console.log(data);
+            // Update the content of the webpage with the fetched statistics
+            document.getElementById('temp-light-stats').innerHTML = `
+                        <p>Highest Temperature: ${data.highest_temperature} degree C</p>
+                        <p>Lowest Temperature: ${data.lowest_temperature} degree C</p>
+                        <p>Highest Light: ${data.highest_light}</p>
+                    `;
+        })
+        .catch(error => {
+            console.error('Error fetching temperature and light statistics:', error);
+            // Display an error message if fetching fails
+            document.getElementById('stats').innerText = 'Failed to fetch statistics.';
+        });
+
+
+    // Fetch actuator data and calculate longest durations
+    fetch('/get_actuator_data')
+        .then(response => response.json())
+        .then(data => {
+            console.log(data);
+            const longestDurations = {};
+
+            // Iterate through each device
+            Object.keys(data).forEach(device => {
+                let maxDuration = 0;
+                let currentDuration = 0;
+                let lastStatus = null;
+                let onStartTime = null;
+
+                // Iterate through timestamps and statuses of the device
+                Object.keys(data[device]).forEach(timestamp => {
+                    const status = data[device][timestamp];
+
+                    if (status === "On") {
+                        if (lastStatus !== "On") {
+                            onStartTime = new Date(timestamp); // Start of a new "On" period
+                        }
+                        currentDuration = (new Date(timestamp) - onStartTime) / 1000; // Calculate duration in seconds
+                    } else {
+                        if (lastStatus === "On") {
+                            if (currentDuration > maxDuration) {
+                                maxDuration = currentDuration; // Update max duration if current duration is greater
+                            }
+                        }
+                    }
+                    lastStatus = status;
+                });
+
+                longestDurations[device] = maxDuration; // Store max duration for the device
+            });
+
+            const deviceNamesMapping = {
+                'LCD': 'LCD Display',
+                'fan': 'Fan',
+                'greenLED': 'Green LED',
+                'redLED': 'Red LED',
+                'yellowLED': 'Yellow LED'
+            };
+
+            // Display longest durations for each device
+            const longestDurationDiv = document.getElementById('longest_durations');
+            Object.keys(longestDurations).forEach(device => {
+                const p = document.createElement('p');
+                const deviceName = deviceNamesMapping[device] || device;
+                p.innerText = `${deviceName}: ${formatDuration(longestDurations[device])}`;
+                longestDurationDiv.appendChild(p);
+            });
+        })
+        .catch(error => console.error('Error fetching actuator data:', error));
+
+    // Function to format duration from seconds to hours and minutes
+    function formatDuration(durationInSeconds) {
+        const hours = Math.floor(durationInSeconds / 3600);
+        const minutes = Math.floor((durationInSeconds % 3600) / 60);
+        return `${hours} hours ${minutes} minutes`;
+    }
+</script>
+{% endblock %}
