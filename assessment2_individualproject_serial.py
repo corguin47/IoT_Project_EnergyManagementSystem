@@ -405,16 +405,16 @@ if __name__ == "__main__":
 
                 # fan
                 try:
-                    if (int(temp) < (int(tempFanLow) - 5)):
+                    if (float(temp) < (float(tempFanLow) - 5)):
                         message = "Fan Off\n"
                         ser.write(message.encode('utf-8'))
-                    elif (int(temp) < int(tempFanLow)):
+                    elif (float(temp) < float(tempFanLow)):
                         message = "Fan 1\n"
                         ser.write(message.encode('utf-8'))
-                    elif (int(tempFanLow) < int(temp) < int(tempFanHigh)):
+                    elif (float(tempFanLow) < float(temp) < float(tempFanHigh)):
                         message = "Fan 2\n"
                         ser.write(message.encode('utf-8'))
-                    elif (int(temp) > tempFanHigh):
+                    elif (float(temp) > float(tempFanHigh)):
                         message = "Fan 3\n"
                         ser.write(message.encode('utf-8'))
                 
@@ -439,6 +439,18 @@ if __name__ == "__main__":
                                 message = "Fan Off\n"
                                 ser.write(message.encode('utf-8'))
                                 while True: # continue the loop only when param database updates to 1.0
+                                    if ser.in_waiting > 0:
+                                        line = ser.readline().decode("utf-8")
+                                        motionSensor(line)
+                                        tempSensor(line)
+                                        lightSensor(line)
+
+                                        lcd(line)
+                                        fan(line)
+                                        redLED(line)
+                                        yellowLED(line)
+                                        greenLED(line)
+                                        battery(line)
                                     motion = readFromParamDatabase("PIR")
                                     if motion == "1.0":
                                         break
